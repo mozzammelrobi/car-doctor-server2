@@ -26,6 +26,51 @@ const client = new MongoClient(uri, {
   }
 });
 
+// create middlewares
+const logger = async(req,res,next) =>{
+  console.log('called',req.host,req.originalUrl)
+  next()
+
+}
+
+// const verifyToken = async(req,res,next)=>{
+//   const token = req.cookies?.token;
+//   console.log('value of token in middleware', token)
+//   if(!token){
+//     return res.status(401).send({message:'not authorized'})
+//   }
+//   jwt.verify(token,process.env.ACCESS_TOKEN_SECRET,(err,decoded)=>{
+//     // err
+//     if(err){
+//       console.log(err)
+//       return res.status(401).send({message:'unauthorized'})
+//     }
+
+//     // if token is valid then it would be decoded
+//     if(decoded){
+//       console.log('value in the token',decoded)
+//       req.user = decoded
+
+//       next()
+//     }
+//   })
+ 
+// }
+
+const verifyToken = async(req,res,next)=> {
+  const token = req.cookies?.token;
+  if(!token){
+    return res.status(401).send({message:'unauthorized access'})
+  }
+  jwt.verify(token,process.env.ACCESS_TOKEN_SECRET,(err,decoded)=> {
+    if(err){
+      return res.status(401).send({message:'unauthorized'})
+    }
+    req.user =decoded
+    next()
+  })
+}
+
 async function run() {
   try {
 
@@ -33,7 +78,7 @@ async function run() {
     const bookingCollection = client.db('carDoctor').collection('bookings')
 
     // auth related api 
-    app.post('/jwt', async (req, res) => {
+    app.post('/jwt',logger, async (req, res) => {
       const user = req.body;
       console.log(user)
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
@@ -47,7 +92,7 @@ async function run() {
     })
 
     // service related api
-    app.get('/services', async (req, res) => {
+    app.get('/services',logger, async (req, res) => {
       const cursor = serviceCollection.find()
       const result = await cursor.toArray()
       res.send(result)
@@ -71,10 +116,15 @@ async function run() {
     })
 
     // booking / checkout l
-    app.get('/bookings', async (req, res) => {
+    app.get('/bookings',logger,verifyToken, async (req, res) => {
       // console.log(req.query.email)
       // console.log('tokeeeeen',req.cookies.token)
-      console.log('Cookie Token:', req.cookies.token);
+      // console.log('Cookie Token:', req.cookies.token);
+      console.log('user in the valid token',req.user)
+      // cheaked the user and verify with his email
+      if(req.query.email !== req.user.email){
+        return res.status(403).send({message:'forbiden access'})
+      }
       let query = {}
       if (req.query?.email) {
         query = { email: req.query.email }
